@@ -152,12 +152,28 @@ app.post('/api/batalla/unirse', (req, res) => {
     }
 });
 
-// Login
 app.post('/login', (req, res) => {
     const { email, password } = req.body;
     db.usuarios.findOne({ email, password }, (err, user) => {
         if (user) {
-            res.send(`<h1>BIENVENIDO, AGENTE: ${user.username.toUpperCase()}</h1><a href="/barracas">IR A BARRACAS</a>`);
+            // Este bloque reemplaza tu mensaje de texto por uno que guarda tu identidad
+            res.send(`
+                <div style="background: #1a1a1a; color: #ff9900; padding: 20px; text-align: center; font-family: monospace;">
+                    <h1>BIENVENIDO, AGENTE: ${user.username.toUpperCase()}</h1>
+                    <p>Sincronizando perfil de combate...</p>
+                    <a href="/barracas" style="color: white;">ENTRAR A LAS BARRACAS</a>
+                </div>
+                <script>
+                    // Esto guarda tu ID único en esta PC específicamente
+                    localStorage.setItem('userId', '${user._id}');
+                    localStorage.setItem('userName', '${user.username}');
+                    
+                    // Redirección automática tras guardar los datos
+                    setTimeout(() => {
+                        window.location.href = "/barracas";
+                    }, 1500);
+                </script>
+            `);
         } else {
             res.status(401).send("ERROR: CREDENCIALES INVÁLIDAS");
         }
