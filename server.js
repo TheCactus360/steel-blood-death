@@ -2,6 +2,8 @@ const express = require('express');
 const path = require('path');
 const Datastore = require('nedb'); 
 const app = express();
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Servidor en puerto ${PORT}`));
 
 // --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
 const db = {};
@@ -12,9 +14,12 @@ db.soldados = new Datastore({ filename: 'soldados.db', autoload: true });
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Servir archivos estáticos
+// Servir archivos estáticos desde tus carpetas específicas
 app.use(express.static(path.join(__dirname, 'CSS')));
 app.use(express.static(path.join(__dirname, 'hmtl')));
+
+// Importación de modelos (Asegúrate de que este archivo exista en /Server/modelo.js)
+const { Usuario, Soldado } = require('./Server/modelo');
 
 // --- 3. DICCIONARIOS DE DATOS ---
 const armasDB = {
@@ -45,9 +50,7 @@ const habilidadesDB = {
     'Vanguard':  { nombre: 'Guardia', desc: '+20% defensa a aliados', cd: 3, dur: 2 }
 };
 
-let batallasActivas = {}; 
-
-// --- 4. RUTAS DE NAVEGACIÓN ---
+// --- 4. RUTAS DE NAVEGACIÓN (Páginas HTML) ---
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'hmtl', 'index.html')));
 app.get('/barracas', (req, res) => res.sendFile(path.join(__dirname, 'hmtl', 'barracas.html')));
 app.get('/ver-escuadron', (req, res) => res.sendFile(path.join(__dirname, 'hmtl', 'escuadron.html')));
@@ -55,20 +58,26 @@ app.get('/combate', (req, res) => res.sendFile(path.join(__dirname, 'hmtl', 'com
 
 // --- 5. API DE DATOS (JSON) ---
 
-// Modificado para que cada uno vea solo sus soldados
+// Obtener escuadrón filtrado por usuario (Para que no se mezclen los personajes)
 app.get('/api/escuadron/:userId', (req, res) => {
-    const userId = req.params.userId;
-    // Si no hay userId, devuelve vacío para evitar mezclar datos
-    if(!userId || userId === "null") return res.json([]);
-    
-    db.soldados.find({ owner: userId }, (err, lista) => {
+    const ownerId = req.params.userId;
+
+    // Si por algún motivo no llega el ID, devolvemos un error o lista vacía
+    if (!ownerId || ownerId === "null" || ownerId === "undefined") {
+        return res.json([]);
+    }
+
+    // Buscamos en la DB solo los soldados cuyo "owner" coincida con el ID del usuario
+    db.soldados.find({ owner: ownerId }, (err, lista) => {
         if (err) return res.status(500).json({ error: err });
         res.json(lista); 
     });
 });
 
+// Obtener datos de armas
 app.get('/api/armas', (req, res) => res.json(armasDB));
 
+// Generador de IA para batallas
 app.post('/api/generar-ia', (req, res) => {
     const { cantidad } = req.body; 
     const nombresEne = ["Desertor", "Insurrecto", "Miliciano", "Saqueador", "Renegado"];
@@ -79,6 +88,7 @@ app.post('/api/generar-ia', (req, res) => {
     for (let i = 0; i < cantidad; i++) {
         let claseRandom = clases[Math.floor(Math.random() * clases.length)];
         let armaRandom = armasEne[Math.floor(Math.random() * armasEne.length)];
+        
         escuadronIA.push({
             _id: 'ia_' + Math.random().toString(36).substr(2, 9),
             nombre: `${nombresEne[Math.floor(Math.random() * nombresEne.length)]} ${i+1}`,
@@ -95,101 +105,231 @@ app.post('/api/generar-ia', (req, res) => {
 
 // --- 6. LÓGICA DE USUARIOS Y TROPAS ---
 
+// Registro de usuarios
 app.post('/registrar', (req, res) => {
     const { username, password, email } = req.body;
     db.usuarios.findOne({ email: email }, (err, user) => {
         if (user) return res.status(400).send('ERROR: EMAIL YA REGISTRADO');
-        const nuevoJugador = { username, email, password, creadoEn: new Date() };
-        db.usuarios.insert(nuevoJugador, () => res.redirect('/'));
+        db.usuarios.count({}, (err, count) => {
+            const nuevoJugador = new Usuario(username, email, password, count);
+            db.usuarios.insert(nuevoJugador, () => res.redirect('/'));
+        });
     });
 });
 
+// --- CONFIGURACIÓN DE BATALLAS PVP ---
+// Ruta para crear o unirse a una batalla (Ajustada para multijugador real)
+app.post('/api/batalla/unirse', (req, res) => {
+    // Recibimos userId para que el servidor sepa quién es el dueño de cada escuadrón
+    const { codigo, escuadron, nombre, userId } = req.body;
+
+    if (!batallasActivas[codigo]) {
+        // JUGADOR 1: Crea la sala
+        batallasActivas[codigo] = {
+            jugador1: { id: userId, nombre: nombre, tropas: escuadron },
+            jugador2: null,
+            turno: userId, // El creador suele empezar
+            estado: 'esperando'
+        };
+        console.log(`Sala ${codigo} creada por ${nombre} (ID: ${userId})`);
+        return res.json({ mensaje: "SALA_CREADA", batalla: batallasActivas[codigo] });
+    } else {
+        // Validar que el Jugador 2 no sea el mismo que el Jugador 1
+        if (batallasActivas[codigo].jugador1.id === userId) {
+            return res.status(400).json({ error: "YA_ESTAS_EN_LA_SALA" });
+        }
+
+        // JUGADOR 2: Se une a la sala existente
+        if (batallasActivas[codigo].jugador2) {
+            return res.status(400).json({ error: "SALA_LLENA" });
+        }
+        
+        batallasActivas[codigo].jugador2 = { id: userId, nombre: nombre, tropas: escuadron };
+        batallasActivas[codigo].estado = 'listo';
+        console.log(`${nombre} (ID: ${userId}) se ha unido a la sala ${codigo}`);
+        
+        return res.json({ mensaje: "BATALLA_INICIADA", batalla: batallasActivas[codigo] });
+    }
+});
+
+// Login
 app.post('/login', (req, res) => {
     const { email, password } = req.body;
     db.usuarios.findOne({ email, password }, (err, user) => {
         if (user) {
-            // Guardamos el ID en el navegador del usuario al loguearse
-            res.send(`
-                <script>
-                    localStorage.setItem('userId', '${user._id}');
-                    localStorage.setItem('userName', '${user.username}');
-                    window.location.href = "/barracas";
-                </script>
-            `);
+            res.send(`<h1>BIENVENIDO, AGENTE: ${user.username.toUpperCase()}</h1><a href="/barracas">IR A BARRACAS</a>`);
         } else {
             res.status(401).send("ERROR: CREDENCIALES INVÁLIDAS");
         }
     });
 });
 
+// --- CREAR SOLDADO (BARRACAS) COMPLETO ---
 app.post('/crear-soldado', (req, res) => {
-    const { nombre, clase, arma_primaria, arma_secundaria, arma_melee, perk, userId } = req.body;
+    const { nombre, clase, arma_primaria, arma_secundaria, arma_melee, perk } = req.body;
     
+    // 1. DETERMINAR LÍMITE DE SLOTS (Basado en Clase y Perk)
     let slotsMax = (clase === "Soldado") ? 3 : 2;
-    if (perk === "Sobreviviente") slotsMax += 1;
-
-    let pesoTotal = (arma_primaria !== "Ninguna" ? 2 : 0) + 
-                    (arma_secundaria !== "Ninguna" ? 1 : 0) + 
-                    (arma_melee !== "Ninguna" ? 1 : 0);
-
-    if (pesoTotal > slotsMax) {
-        return res.status(400).send("SOBRECARGA");
+    
+    // Bonus pasivo de Sobreviviente: +1 slot extra
+    if (perk === "Sobreviviente") {
+        slotsMax += 1;
     }
 
+    // 2. CALCULAR PESO DEL EQUIPAMIENTO
+    let pesoPrimaria = (arma_primaria !== "Ninguna" ? 2 : 0);
+    let pesoSecundaria = (arma_secundaria !== "Ninguna" ? 1 : 0);
+    let pesoMelee = (arma_melee !== "Ninguna" ? 1 : 0);
+
+    let pesoTotal = pesoPrimaria + pesoSecundaria + pesoMelee;
+
+    // 3. VALIDACIÓN DE AMBIDIEXTRO
+    // Si tiene Ambidiextro, podrías permitir combinaciones especiales o 
+    // simplemente validar que no exceda los slots con armas ligeras.
+    if (perk === "Ambidiextro" && arma_primaria !== "Ninguna") {
+        console.log(`Aviso: ${nombre} es Ambidiextro pero lleva arma pesada.`);
+    }
+
+    // 4. VERIFICAR SOBRECARGA
+    if (pesoTotal > slotsMax) {
+        return res.status(400).send(`
+            <h1>ERROR DE RECLUTAMIENTO</h1>
+            <p>La unidad ${nombre} excede su capacidad de carga (${pesoTotal}/${slotsMax}).</p>
+            <a href="/barracas">VOLVER A BARRACAS</a>
+        `);
+    }
+
+    // 5. PREPARAR OBJETO DE LA UNIDAD
+    // Extraemos los stats de las armas de tu armasDB para guardarlos en el soldado
+    const statsArmaP = armasDB[arma_primaria] || { dmg: 0 };
+    const statsArmaS = armasDB[arma_secundaria] || { dmg: 0 };
+    const statsArmaM = armasDB[arma_melee] || { dmg: 0 };
+
+    // Buscamos la habilidad de clase correspondiente
+    const habilidadClase = habilidadesDB[clase] || { nombre: 'N/A', desc: 'Sin habilidad', cd: 0 };
+
+    // Creamos el registro para la DB
     const nuevaUnidad = {
         nombre: nombre.toUpperCase(),
-        clase,
-        perk,
-        owner: userId, // Vinculamos el soldado al usuario
+        clase: clase,
+        perk: perk,
         equipo: "Jugador",
         hp: 100,
         hpMax: 100,
-        arma_primaria,
-        arma_secundaria,
-        arma_melee,
-        habilidad: habilidadesDB[clase] || { nombre: 'N/A' },
+        nivel: 1,
+        experiencia: 0,
+        
+        // Armamento y Stats
+        armas: {
+            primaria: { nombre: arma_primaria, ...statsArmaP },
+            secundaria: { nombre: arma_secundaria, ...statsArmaS },
+            melee: { nombre: arma_melee, ...statsArmaM }
+        },
+        
+        // Habilidad Activa
+        habilidad: habilidadClase,
+        cdActual: 0,
+        
+        // Datos de inventario/peso
+        peso: pesoTotal,
+        slots: slotsMax,
+        
+        // Estados temporales de combate
+        estado: {
+            enSigilo: false,
+            marcado: false,
+            defensaBuff: 0,
+            dañoBuff: 0
+        },
+        
         creadoEn: new Date()
     };
 
+    // 6. GUARDAR EN NEDB
     db.soldados.insert(nuevaUnidad, (err, doc) => {
-        if (err) return res.status(500).send("ERROR DB");
+        if (err) {
+            console.error("Error al insertar en DB:", err);
+            return res.status(500).send("ERROR CRÍTICO EN LA BASE DE DATOS");
+        }
+        console.log(`Unidad registrada: ${doc.nombre} [${doc.clase}] con Perk: ${doc.perk}`);
         res.redirect('/ver-escuadron');
     });
 });
 
-// --- 7. SISTEMA DE BATALLAS ---
-app.post('/api/batalla/unirse', (req, res) => {
-    const { codigo, escuadron, nombre, userId } = req.body;
-
-    if (!batallasActivas[codigo]) {
-        batallasActivas[codigo] = {
-            jugador1: { id: userId, nombre: nombre, tropas: escuadron },
-            jugador2: null,
-            estado: 'esperando'
-        };
-        return res.json({ mensaje: "SALA_CREADA", batalla: batallasActivas[codigo] });
-    } else {
-        if (batallasActivas[codigo].jugador2) return res.status(400).json({ mensaje: "SALA_LLENA" });
-        batallasActivas[codigo].jugador2 = { id: userId, nombre: nombre, tropas: escuadron };
-        batallasActivas[codigo].estado = 'listo';
-        return res.json({ mensaje: "BATALLA_INICIADA", batalla: batallasActivas[codigo] });
-    }
-});
-
-app.get('/api/batalla/estado/:codigo', (req, res) => {
-    const batalla = batallasActivas[req.params.codigo];
-    batalla ? res.json(batalla) : res.status(404).json({ mensaje: "SALA_EXPIRADA" });
-});
-
-app.delete('/api/soldado/:id', (req, res) => {
+// Eliminar soldado (Baja voluntaria o muerte en combate)
+app.post('/api/borrar-soldado/:id', (req, res) => {
     db.soldados.remove({ _id: req.params.id }, {}, (err, numRemoved) => {
         if (err) return res.status(500).json({ error: err });
-        res.json({ success: true });
+        res.json({ success: true, removed: numRemoved });
     });
 });
 
-// --- 8. INICIO ---
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`SERVIDOR BSD CORRIENDO EN PUERTO ${PORT}`);
+// Ruta DELETE (Estándar para muerte en combate)
+app.delete('/api/soldado/:id', (req, res) => {
+    db.soldados.remove({ _id: req.params.id }, {}, (err, numRemoved) => {
+        if (err) return res.status(500).json({ error: err });
+        res.json({ success: true, removed: numRemoved });
+    });
+});
+
+// --- 7. ENCENDIDO DEL SISTEMA ---
+app.listen(PORT, () => {
+    console.log(`=========================================`);
+    console.log(`SISTEMA BSD ONLINE - MODO ESCARAMUZA`);
+    console.log(`PUERTO: ${PORT}`);
+    console.log(`ESTADO: OPERATIVO`);
+    console.log(`=========================================`);
+});
+
+app.post('/api/batalla/unirse', (req, res) => {
+    const { codigo, escuadron, nombre } = req.body;
+
+    // Si la sala no existe, la creamos (Jugador 1)
+    if (!batallas[codigo]) {
+        batallas[codigo] = {
+            jugador1: { nombre: nombre, tropas: escuadron, listo: false },
+            jugador2: { nombre: null, tropas: [], listo: false },
+            estado: 'esperando'
+        };
+        return res.json({ mensaje: "SALA_CREADA" });
+    } 
+
+    // Si existe y falta el Jugador 2, lo unimos
+    if (batallas[codigo].jugador2.nombre === null) {
+        batallas[codigo].jugador2 = { nombre: nombre, tropas: escuadron, listo: false };
+        return res.json({ mensaje: "BATALLA_INICIADA", batalla: batallas[codigo] });
+    }
+
+    res.status(400).json({ mensaje: "SALA_LLENA" });
+});
+
+app.post('/api/batalla/unirse', (req, res) => {
+    const { codigo, escuadron, nombre } = req.body;
+
+    // Si la sala no existe, la creamos (Jugador 1)
+    if (!batallas[codigo]) {
+        batallas[codigo] = {
+            jugador1: { nombre: nombre, tropas: escuadron, listo: false },
+            jugador2: { nombre: null, tropas: [], listo: false },
+            estado: 'esperando'
+        };
+        return res.json({ mensaje: "SALA_CREADA" });
+    } 
+
+    // Si existe y falta el Jugador 2, lo unimos
+    if (batallas[codigo].jugador2.nombre === null) {
+        batallas[codigo].jugador2 = { nombre: nombre, tropas: escuadron, listo: false };
+        return res.json({ mensaje: "BATALLA_INICIADA", batalla: batallas[codigo] });
+    }
+
+    res.status(400).json({ mensaje: "SALA_LLENA" });
+});
+
+app.get('/api/batalla/estado/:codigo', (req, res) => {
+    const batalla = batallas[req.params.codigo];
+    if (batalla) {
+        res.json(batalla); // Envía todo el objeto, incluyendo el .estado
+    } else {
+        res.status(404).json({ mensaje: "SALA_EXPIRADA" });
+    }
 });
