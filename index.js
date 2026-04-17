@@ -59,22 +59,24 @@ app.post('/login', (req, res) => {
     });
 });
 
-// Ruta para Crear Soldado: Ahora guarda en soldados.db
+// Ruta para Crear Soldado mejorada
 app.post('/crear-soldado', (req, res) => {
-    const { nombre, tipo } = req.body;
+    // Esto captura CUALQUIER nombre que le hayas puesto en el HTML
+    const nombre = req.body.nombre || req.body.username || "Recluta Desconocido";
+    const tipo = req.body.tipo || "Infantería";
     
-    const nuevaUnidad = {
-        nombre,
-        tipo,
-        nivel: 1,
-        estado: "Listo para combate",
-        creadoEn: new Date()
-    };
+    const nuevaUnidad = { nombre, tipo, nivel: 1, creadoEn: new Date() };
 
     dbSoldados.insert(nuevaUnidad, (err, unidadGuardada) => {
-        if (err) return res.status(500).send("Error al desplegar unidad.");
-        console.log(`Unidad creada: ${unidadGuardada.nombre}`);
-        res.send(`<h1>UNIDAD CREADA</h1><p>El soldado ${nombre} (${tipo}) ha sido asignado a las barracas.</p><a href="/barracas">Volver a Barracas</a>`);
+        if (err) return res.status(500).send("Error en la base de datos.");
+        
+        // Vamos a redirigir directamente a la API para que veas que SÍ se guardó
+        res.send(`
+            <h1>UNIDAD GUARDADA: ${unidadGuardada.nombre}</h1>
+            <p>Estado: En base de datos (NeDB)</p>
+            <a href="/api/soldados">VER LISTA DE SOLDADOS (JSON)</a><br><br>
+            <a href="/barracas">VOLVER A BARRACAS</a>
+        `);
     });
 });
 
