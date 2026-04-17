@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>FRENTE DE BATALLA - BSD</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        /* --- ESTILOS DE IMPACTO Y ESTADO --- */
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            20% { transform: translate(-3px, 0px) rotate(-1deg); }
+            40% { transform: translate(3px, 2px) rotate(1deg); }
+            100% { transform: translate(1px, -1px) rotate(0deg); }
+        }
+
+        .recibir-dano {
+            animation: shake 0.2s;
+            background-color: rgba(255, 0, 0, 0.4) !important;
+            border-color: #ff0000 !important;
+        }
+
+        .dmg-float {
+            position: absolute;
+            color: #ff4444;
+            font-weight: bold;
+            font-size: 1.8rem;
+            pointer-events: none;
+            font-family: 'Courier New', monospace;
+            text-shadow: 2px 2px #000;
+            animation: flyUp 0.8s ease-out forwards;
+            z-index: 999;
+        }
+
+        @keyframes flyUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-60px); }
+        }
+
+        .unidad-card.dead {
+            filter: grayscale(1);
+            opacity: 0.5;
+            pointer-events: none;
+            border: 1px dashed #444 !important;
+        }
+
+        .main-battle-grid {
+            display: grid; 
+            grid-template-columns: 1fr 1.5fr 1fr; 
+            gap: 20px;
+            max-width: 1400px;
+            margin: auto;
+        }
+
+        .btn-arma {
+            padding: 10px;
+            cursor: pointer;
+            background: #2a2a2a;
+            color: #eee;
+            border: 1px solid #444;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.8rem;
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        .btn-arma:hover { background: #444; }
+
+        /* Estilo para el selector de modo */
+        .modal-modo {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); display: flex; align-items: center;
+            justify-content: center; z-index: 1000;
+        }
+
+        /* Estilos para el input de código PvP */
+        .input-codigo {
+            width: 100%;
+            background: #1a1c16;
+            color: #ffb400;
+            border: 2px solid #5d634f;
+            padding: 10px;
+            text-align: center;
+            font-size: 1.2rem;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="modal-inicio" class="modal-modo">
+        <div style="background: #e0ddd5; padding: 30px; border: 3px solid #1a1c16; text-align: center; max-width: 400px; box-shadow: 10px 10px 0px #5d634f;">
+            <h2 style="color: #1a1c16; font-family: 'Courier New'; margin-bottom: 20px;">TIPO DE OPERACIÓN</h2>
+            
+            <div id="menu-principal-op">
+                <button onclick="configurarModo('IA')" style="width: 100%; padding: 15px; margin: 10px 0; background: #5d634f; color: white; border: none; cursor: pointer; font-weight: bold; border: 2px solid #1a1c16;">
+                    [ VS INTELIGENCIA ARTIFICIAL ]
+                </button>
+                <button onclick="mostrarSubmenuPvP()" style="width: 100%; padding: 15px; margin: 10px 0; background: #8b0000; color: white; border: none; cursor: pointer; font-weight: bold; border: 2px solid #1a1c16;">
+                    [ DUELO CONTRA JUGADOR ]
+                </button>
+            </div>
+
+            <div id="menu-pvp-op" style="display: none;">
+                <button onclick="crearSalaPvP()" style="width: 100%; padding: 12px; margin: 5px 0; background: #1a1c16; color: #ffb400; border: 1px solid #ffb400; cursor: pointer; font-weight: bold;">
+                    [ CREAR NUEVA SALA ]
+                </button>
+                
+                <div style="margin: 15px 0; border-top: 1px dashed #1a1c16; padding-top: 15px;">
+                    <small style="color: #1a1c16; font-weight: bold;">UNIRSE A SALA EXISTENTE:</small>
+                    <input type="text" id="codigo-input" class="input-codigo" placeholder="CÓDIGO HEX">
+                    <button onclick="unirseASalaPvP()" style="width: 100%; padding: 12px; margin-top: 10px; background: #5d634f; color: white; border: none; cursor: pointer; font-weight: bold;">
+                        [ DESPLEGAR EN SALA ]
+                    </button>
+                </div>
+
+                <button onclick="ocultarSubmenuPvP()" style="background: none; border: none; color: #8b0000; cursor: pointer; font-size: 0.8rem; margin-top: 10px; text-decoration: underline;">
+                    VOLVER ATRÁS
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <nav class="navbar">
+        <a href="/">[ MANDO ]</a>
+        <a href="/barracas">[ BARRACAS ]</a>
+        <a href="/ver-escuadron">[ ESCUADRÓN ]</a>
+    </nav>
+
+    <div id="fase-seleccion" style="padding: 20px; display: none;">
+        <h1 id="titulo-seleccion" style="color: #ffb400; text-align: center; font-family: 'Courier New', Courier, monospace;">RECLUTAMIENTO DE PELOTÓN (0/20)</h1>
+        <div id="lista-disponibles" class="grid-seleccion" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; max-width: 1200px; margin: auto;"></div>
+
+        <div style="display: flex; justify-content: center; margin-top: 30px;">
+            <button id="btn-confirmar" onclick="iniciarGuerra()" style="display:none; width:350px; background:#ffb400; color:#1a1c16; font-size: 1.2rem; font-weight: bold; padding: 15px; border: none; cursor: pointer; border-radius: 4px;">
+                [ CONFIRMAR DESPLIEGUE ]
+            </button>
+        </div>
+    </div>
+
+    <div id="fase-combate" style="display: none; padding: 10px;">
+        <div class="main-battle-grid">
+            <div class="columna-unidades" id="cont-aliados">
+                <h3 style="color: #5d634f; text-align: center; border-bottom: 2px solid #5d634f;">MI PELOTÓN</h3>
+            </div>
+
+            <div class="panel-central">
+                <div id="panel-estadisticas" style="display: none;">
+                    <div class="info-panel-detalle" id="info-box" style="background: #e0ddd5; color: #1a1c16; padding: 15px; border: 2px solid #1a1c16; font-family: 'Courier New', monospace; margin-bottom: 15px; box-shadow: 4px 4px 0px #000;"></div>
+                    <div id="panel-armas" style="background: rgba(0,0,0,0.8); padding: 15px; border: 1px solid #ffb400; margin-bottom: 15px;">
+                        <div id="panel-habilidades" style="background: rgba(20,20,20,0.9); padding: 15px; border: 1px solid #00f2ff; margin-top: 10px;">
+                            <small style="color:#00f2ff; font-weight:bold; display:block; margin-bottom:10px;">HABILIDADES DE CLASE:</small>
+                            <div id="cont-botones-habilidades"></div>
+                        </div>
+                        <small style="color:#ffb400; font-weight:bold; display:block; margin-bottom:10px;">ÓRDENES DE ATAQUE:</small>
+                        <div id="cont-botones-armas"></div>
+                    </div>
+                </div>
+
+                <div class="log-combate" id="log" style="height: 300px; overflow-y: auto; background: #0a0a0a; color: #afff94; padding: 12px; font-family: 'Consolas', monospace; font-size: 0.85rem; border: 1px solid #333; border-left: 4px solid #5d634f;">
+                    > INICIANDO SISTEMAS DE COMBATE...<br>
+                </div>
+                
+                <div style="text-align: center; margin-top: 10px;">
+                    <button onclick="window.location.reload()" style="background: none; border: 1px solid #444; color: #666; font-size: 0.7rem; cursor: pointer; padding: 5px 10px;">
+                        [ ABORTAR MISIÓN / REPLEGAR ]
+                    </button>
+                </div>
+            </div>
+
+            <div id="modal-espera" class="modal-modo" style="display: none;">
+                <div style="background: #e0ddd5; padding: 30px; border: 3px solid #1a1c16; text-align: center; min-width: 350px;">
+                    <h2 id="lobby-sala-id" style="color: #1a1c16; font-family: 'Courier New';">SALA: ----</h2>
+                    <p id="lobby-status" style="color: #5d634f; font-weight: bold;">CONECTADO. ESPERANDO AL OTRO COMANDANTE...</p>
+                    
+                    <div id="contenedor-ready" style="margin-top: 20px;">
+                        <button id="btn-ready" onclick="marcarListo()" style="width: 100%; padding: 15px; background: #5d634f; color: white; border: 2px solid #1a1c16; cursor: pointer; font-weight: bold;">
+                            [ CONFIRMAR ESCUADRÓN Y LISTO ]
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="columna-unidades" id="cont-enemigos">
+                <h3 style="color: #8b0000; text-align: center; border-bottom: 2px solid #8b0000;">FUERZAS HOSTILES</h3>
+            </div>
+        </div>
+    </div>
+      
+</body>
+</html>
+
+    <script>
+        let fullEscuadron = [];
+        let misElegidos = [];
+        let escuadronIA = [];
+        let armasData = {};
+        let atacanteActual = null;
+        let armaElegida = null;
+        let modoJuego = ""; 
+        let codigoSala = "";
+        let unidadesSeleccionadas = JSON.parse(sessionStorage.getItem('escuadronSeleccionado')) || [];
+        let salaActual = null;
+        let miRol = null; // 'j1' o 'j2'
+
+        // En tu archivo server.js o app.js
+        const batallas = {};
+
+        const habilidadesPorClase = {
+            'SOLDADO': { nombre: 'SUMINISTRO', desc: 'Entrega munición: +20% de daño.', cd: 3 },
+            'INGENIERO': { nombre: 'BÚNKER', desc: 'Despliega estructura defensiva para el equipo.', cd: 4 },
+            'FUNERARIO': { nombre: 'EXEQUIAS', desc: 'Medicina de campo: Cura 25% de salud.', cd: 2 },
+            'OFICIAL': { nombre: 'SILBATO', desc: 'Liderazgo: +2 Velocidad y +10% daño global.', cd: 3 },
+            'JAEGER': { nombre: 'MARCA', desc: 'Avistamiento: Enemigo marcado sufre +20% daño.', cd: 4 },
+            'LANCER': { nombre: 'ADRENALINA', desc: 'Supervivencia: Cura 15% y +20% daño propio.', cd: 4 },
+            'VANGUARD': { nombre: 'GUARDIA', desc: 'Protección: +20% defensa aliados.', cd: 3 }
+        };
+
+        // Función para elegir modo al inicio
+        function configurarModo(modo) {
+            modoJuego = modo;
+            document.getElementById('modal-inicio').style.display = 'none';
+            document.getElementById('fase-seleccion').style.display = 'block';
+            
+            if (modo === 'PVP') {
+                codigoSala = prompt("Introduce un CÓDIGO DE SALA para el duelo:");
+                if (!codigoSala) window.location.reload();
+            }
+            inicializar();
+        }
+
+        async function inicializar() {
+            try {
+                const [resArmas, resEscuadron] = await Promise.all([
+                    fetch('/api/armas'),
+                    fetch('/api/escuadron')
+                ]);
+                armasData = await resArmas.json();
+                fullEscuadron = await resEscuadron.json();
+
+                const cont = document.getElementById('lista-disponibles');
+                
+                cont.innerHTML = fullEscuadron.map(s => {
+                    // Detectar si es Ambidiextro para poner un icono especial
+                    const iconoPerk = s.perk === 'Ambidiextro' ? '⚔️' : '🎖️';
+                    
+                    // Resumen de armas para que el jugador sepa qué lleva
+                    const armasEquipadas = [
+                        s.arma_primaria, 
+                        s.arma_secundaria, 
+                        s.arma_melee
+                    ].filter(a => a !== "Ninguna").join(" | ");
+
+                    return `
+                        <div class="ficha-mini" id="sel-${s._id}" onclick="toggleSeleccion('${s._id}')" 
+                            style="border: 2px solid #5d634f; padding: 12px; cursor: pointer; background: #e0ddd5; color: #1a1c16; border-radius: 4px; position: relative; transition: 0.2s;">
+                            
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <strong style="text-transform: uppercase; font-size: 1rem;">${s.nombre}</strong>
+                                <span title="${s.perk}" style="font-size: 1.1rem;">${iconoPerk}</span>
+                            </div>
+
+                            <div style="margin-top: 5px;">
+                                <small style="background:#1a1c16; color: #ffb400; padding: 2px 6px; font-weight: bold; text-transform: uppercase;">
+                                    ${s.clase}
+                                </small>
+                                <small style="margin-left: 5px; color: #5d634f; font-style: italic;">
+                                    ${s.perk}
+                                </small>
+                            </div>
+
+                            <div style="margin-top: 8px; font-size: 0.7rem; border-top: 1px dashed #5d634f; padding-top: 5px; color: #333;">
+                                <strong>EQUIPO:</strong> ${armasEquipadas || 'Solo puños'}
+                            </div>
+
+                            <div style="position: absolute; bottom: 5px; right: 8px; font-size: 0.65rem; color: #888;">
+                                SLOTS: ${s.peso || '?'}/${s.slots || '?'}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) { 
+                console.error("Error cargando escuadrón:", e); 
+                document.getElementById('lista-disponibles').innerHTML = "<p style='color:red;'>ERROR AL CARGAR TROPAS</p>";
+            }
+        }
+
+        function toggleSeleccion(id) {
+            const index = misElegidos.findIndex(s => s._id === id);
+            const el = document.getElementById('sel-' + id);
+            const btnConfirmar = document.getElementById('btn-confirmar');
+            const titulo = document.getElementById('titulo-seleccion');
+
+            if (index > -1) {
+                misElegidos.splice(index, 1);
+                el.style.background = "#e0ddd5";
+            } else {
+                if (misElegidos.length >= 20) return;
+                const soldado = fullEscuadron.find(s => s._id === id);
+                misElegidos.push({ ...soldado, hp: 100, defensa: 0, cdActual: 0 });
+                el.style.background = "#ffb400";
+            }
+
+            // --- LÓGICA DE ACTUALIZAR CONTADOR ---
+            const total = misElegidos.length;
+            titulo.innerText = `RECLUTAMIENTO DE PELOTÓN (${total}/20)`;
+
+            if (total >= 10) {
+                btnConfirmar.style.display = 'block';
+                btnConfirmar.style.background = "#ffb400"; // Color normal
+                btnConfirmar.innerText = "[ CONFIRMAR DESPLIEGUE ]";
+                btnConfirmar.disabled = false;
+                titulo.style.color = "#ffb400";
+            } else {
+                btnConfirmar.style.display = 'block'; // Lo dejamos visible para que el usuario sepa que existe
+                btnConfirmar.style.background = "#555"; // Color gris oscuro (desactivado)
+                btnConfirmar.innerText = `FALTAN ${10 - total} SOLDADOS`;
+                btnConfirmar.disabled = true;
+            }
+        }
+
+        async function iniciarGuerra() {
+            // 1. Validación de tropas (Mínimo 10)
+            if (misElegidos.length < 10) {
+                addLog("> ERROR: FUERZAS INSUFICIENTES PARA EL DESPLIEGUE.");
+                alert("Necesitas un mínimo de 10 soldados.");
+                return;
+            }
+
+            if (modoJuego === 'IA') {
+                // --- FLUJO CONTRA LA IA ---
+                const res = await fetch('/api/generar-ia', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cantidad: misElegidos.length })
+                });
+                escuadronIA = await res.json();
+                
+                // En IA el combate empieza de inmediato
+                comenzarFaseCombate();
+
+            } else {
+                // --- FLUJO PVP ---
+                addLog("> ENVIANDO DATOS DE DESPLIEGUE AL SERVIDOR...");
+                
+                const res = await fetch('/api/batalla/unirse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        codigo: codigoSala,
+                        escuadron: misElegidos,
+                        nombre: "Comandante"
+                    })
+                });
+                const data = await res.json();
+
+                // Si ambos ya están en la sala con tropas...
+                if (data.batalla && data.batalla.jugador1.tropas.length > 0 && data.batalla.jugador2.tropas.length > 0) {
+                    // Asignamos las tropas del rival a escuadronIA para que el tablero las dibuje
+                    escuadronIA = (miRol === 'j2') ? data.batalla.jugador1.tropas : data.batalla.jugador2.tropas;
+                    comenzarFaseCombate();
+                } else {
+                    // Si el otro aún no termina, bloqueamos la pantalla de selección con un aviso
+                    document.getElementById('fase-seleccion').innerHTML = `
+                        <div style="background: #1a1c16; color: #ffb400; padding: 50px; text-align: center; border: 3px solid #ffb400; margin-top: 50px;">
+                            <h2>DESPLIEGUE CONFIRMADO</h2>
+                            <p>ESPERANDO A QUE EL OPONENTE TERMINE SU RECLUTAMIENTO...</p>
+                            <div style="margin-top: 20px;" class="loader"></div>
+                        </div>
+                    `;
+                    // IMPORTANTE: Aquí tu polling (iniciarPollingPvP) debe estar corriendo 
+                    // para que cuando detecte que el rival está listo, llame a comenzarFaseCombate()
+                }
+            }
+        }
+
+// Función auxiliar para activar la pantalla de combate
+function comenzarFaseCombate() {
+    document.getElementById('fase-seleccion').style.display = 'none';
+    document.getElementById('fase-combate').style.display = 'block';
+    actualizarTablero();
+    addLog("> DESPLIEGUE FINALIZADO. ENTRAMOS EN CONTACTO.");
+}
+
+       function seleccionarAliado(id) {
+            // --- ARREGLO: DETECTAR SI ES OBJETIVO DE HABILIDAD ---
+            // Si ya hay un atacante y una habilidad/arma preparada, 
+            // ejecutamos la acción sobre este aliado en lugar de seleccionarlo.
+            if (atacanteActual && armaElegida) {
+                seleccionarObjetivo(id);
+                return; // Detenemos la ejecución aquí
+            }
+
+            // --- LÓGICA DE SELECCIÓN NORMAL ---
+            const u = misElegidos.find(x => x._id === id);
+            if(!u || u.hp <= 0) return;
+            
+            atacanteActual = u;
+
+            document.getElementById('panel-estadisticas').style.display = 'block';
+            
+            // Función auxiliar para sacar la info del arma
+            const getWeaponInfo = (nombreArma) => {
+                if (!nombreArma || nombreArma.toUpperCase() === 'NINGUNA') return "Sin armamento equipado";
+                const stats = armasData[nombreArma];
+                const dmg = stats ? stats.dmg : 10;
+                const crit = stats ? (stats.crit || 0) : 0; 
+                return `Daño Base: ${dmg} | Prob. Crítico: ${Math.floor(crit * 100)}%`;
+            };
+
+            // Actualizar Panel de Info Superior
+            document.getElementById('info-box').innerHTML = `
+                <h4 style="margin:0 0 10px 0; border-bottom:2px solid #1a1c16; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:1.1rem; font-weight:bold;">${u.nombre}</span> 
+                    <span style="background:#1a1c16; color:#ffb400; padding:2px 8px; font-size:0.75rem; border-radius:2px;">${u.clase.toUpperCase()}</span>
+                </h4>
+                <div style="font-family:'Courier New', monospace; font-size:0.9rem;">
+                    <strong>HP:</strong> ${u.hp}% | <strong>RANGO:</strong> LVL ${u.nivel || 1} | <strong>CD:</strong> ${u.cdActual || 0}
+                </div>
+            `;
+            
+            // Botones de Armas
+            document.getElementById('cont-botones-armas').innerHTML = `
+                <button class="btn-arma" title="${getWeaponInfo(u.arma_primaria)}" onclick="setArma('${u.arma_primaria}')">
+                    [ PRI ] ${u.arma_primaria}
+                </button>
+                <button class="btn-arma" title="${getWeaponInfo(u.arma_secundaria)}" onclick="setArma('${u.arma_secundaria}')" 
+                    ${!u.arma_secundaria || u.arma_secundaria.toUpperCase() === 'NINGUNA' ? 'disabled' : ''}>
+                    [ SEC ] ${u.arma_secundaria}
+                </button>
+                <button class="btn-arma" title="${getWeaponInfo(u.arma_melee)}" onclick="setArma('${u.arma_melee}')">
+                    [ MEL ] ${u.arma_melee}
+                </button>
+            `;
+
+            // Botones de Habilidades con validación de Cooldown visual
+            const hab = habilidadesPorClase[u.clase.toUpperCase()];
+            if(hab) {
+                const estaEnCD = u.cdActual > 0;
+                document.getElementById('cont-botones-habilidades').innerHTML = `
+                    <button class="btn-arma" 
+                            style="border-color:${estaEnCD ? '#444' : '#00f2ff'}; color:${estaEnCD ? '#666' : '#00f2ff'};" 
+                            title="${hab.desc} | CD: ${hab.cd} turnos" 
+                            onclick="${estaEnCD ? '' : `usarHabilidad('${u._id}')`}"
+                            ${estaEnCD ? 'disabled' : ''}>
+                        [ ESPEC ] ${hab.nombre} ${estaEnCD ? `(${u.cdActual})` : ''}
+                    </button>
+                `;
+            } else {
+                document.getElementById('cont-botones-habilidades').innerHTML = `<small style="color:#666;">HABILIDADES NO DISPONIBLES</small>`;
+            }
+        }
+
+            async function seleccionarObjetivo(id) {
+                // 1. Verificación de seguridad básica
+                if(!atacanteActual || !armaElegida) {
+                    addLog("> <span style='color:#ffb400;'>Seleccione un arma o habilidad primero.</span>");
+                    return;
+                }
+                
+                // 2. Localizar al objetivo en cualquier bando
+                let esEnemigo = escuadronIA.find(u => u._id === id);
+                let esAliado = misElegidos.find(u => u._id === id);
+                let objetivo = esEnemigo || esAliado;
+
+                if(!objetivo || objetivo.hp <= 0) return;
+
+                // 3. Detectar si es la habilidad especial
+                const hab = habilidadesPorClase[atacanteActual.clase.toUpperCase()];
+                let esHabilidad = (hab && armaElegida === hab.nombre);
+
+                if (esHabilidad) {
+                    // --- LÓGICA DE HABILIDAD ---
+                    if (atacanteActual.cdActual > 0) {
+                        addLog(`> ERROR: ${hab.nombre} en recarga.`);
+                        return; 
+                    }
+                    ejecutarEfectoHabilidad(hab, atacanteActual, objetivo);
+                    atacanteActual.cdActual = hab.cd; 
+                } 
+                else {
+                    // --- LÓGICA DE ATAQUE NORMAL ---
+                    // Bloquear fuego amigo con armas normales
+                    if (esAliado) {
+                        addLog("> <span style='color:orange;'>¡No puedes disparar a tus propios hombres!</span>");
+                        return;
+                    }
+
+                    // CORRECCIÓN CRÍTICA: Buscar datos del arma o usar valores base si falla
+                    const stats = armasData[armaElegida] || { dmg: 15, crit: 0.1 };
+
+                    // Procesar Esquiva (Buff del Oficial)
+                    if (objetivo.esquiva && Math.random() < objetivo.esquiva) {
+                        addLog(`> <span style="color:#aaa;">${objetivo.nombre} HA ESQUIVADO EL ATAQUE!</span>`);
+                        mostrarImpactoUI(objetivo._id, "MISS");
+                    } else {
+                        // Calcular daño + Marca del Jaeger
+                        let multiplicador = (objetivo.marcado) ? 1.2 : 1; 
+                        let critico = Math.random() < (stats.crit || 0.1) ? 2 : 1;
+                        let dmg = Math.floor((stats.dmg * multiplicador) * critico);
+                        
+                        objetivo.hp = Math.max(0, objetivo.hp - dmg);
+                        mostrarImpactoUI(objetivo._id, dmg);
+                        addLog(`> ${atacanteActual.nombre} ataca con ${armaElegida}: ${dmg} de daño.`);
+                    }
+                }
+                
+                // 4. Finalizar turno
+                finalizarTurno();
+            }
+
+        // Nueva función para procesar los efectos de tu lista oficial
+        function ejecutarEfectoHabilidad(hab, origen, destino) {
+            addLog(`<span style="color:#00f2ff;">> ${origen.nombre} ACTIVA ${hab.nombre}!</span>`);
+
+            switch(origen.clase.toUpperCase()) {
+                case 'SOLDADO': 
+                    // Suministro: Mejora el daño del aliado seleccionado
+                    destino.buffDmg = 1.2;
+                    addLog(`> ${destino.nombre} recibe suministros: +20% daño en su siguiente ataque.`);
+                    break;
+
+                case 'INGENIERO': 
+                    // Búnker: Otorga una defensa pesada al aliado seleccionado
+                    destino.defensa = 0.5; 
+                    addLog(`> ${destino.nombre} se refugia en el Búnker (Daño recibido -50%).`);
+                    break;
+
+                case 'FUNERARIO': 
+                    // Exequias: Cura al aliado seleccionado
+                    destino.hp = Math.min(100, destino.hp + 25);
+                    addLog(`> ${destino.nombre} ha sido estabilizado por el Funerario (+25 HP).`);
+                    break;
+
+                case 'OFICIAL': 
+                    // Silbato: Efecto global para TODO el pelotón (Esquiva + Daño)
+                    misElegidos.forEach(u => {
+                        if(u.hp > 0) {
+                            u.esquiva = 0.20; // 20% de probabilidad de MISS
+                            u.buffDmg = 1.1;  // +10% daño global
+                        }
+                    });
+                    addLog(`> ¡ORDEN DEL OFICIAL! El escuadrón gana 20% de ESQUIVA y bonificación de daño.`);
+                    break;
+
+                case 'JAEGER': 
+                    // Marca: Debuff para un enemigo
+                    destino.marcado = true;
+                    addLog(`> ${destino.nombre} ha sido MARCADO. Recibirá +20% de daño de todas las fuentes.`);
+                    break;
+
+                case 'LANCER': 
+                    // Adrenalina: Mejora personal (Self-buff)
+                    origen.hp = Math.min(100, origen.hp + 15);
+                    origen.buffDmg = 1.2;
+                    addLog(`> ${origen.nombre} se inyecta adrenalina: Recupera salud y aumenta su potencia.`);
+                    break;
+
+                case 'VANGUARD': 
+                    // Guardia: Defensa ligera para todo el equipo
+                    misElegidos.forEach(u => {
+                        if(u.hp > 0) u.defensa = 0.2;
+                    });
+                    addLog(`> Formación de Guardia: El escuadrón reduce el daño recibido en 20%.`);
+                    break;
+                    
+                default:
+                    addLog(`> La habilidad de ${origen.clase} no tiene un efecto programado.`);
+                    break;
+            }
+        }
+
+            function finalizarTurno() {
+                // 1. GESTIÓN DE ESTADOS Y COOLDOWNS DE TU EQUIPO
+                misElegidos.forEach(u => {
+                    // Reducir el tiempo de recarga de la habilidad si está en CD
+                    if (u.cdActual > 0) {
+                        u.cdActual--;
+                    }
+
+                    // Limpieza de efectos temporales (duran solo 1 turno de acción)
+                    // Esto evita que los buffs se acumulen infinitamente o duren toda la partida
+                    u.esquiva = 0;    // Se va la esquiva del Oficial
+                    u.defensa = 0;    // Se va el Búnker o la Guardia del Vanguard
+                    u.marcado = false; // Si un aliado estaba marcado, se limpia (opcional)
+                    
+                    // El buff de daño (Soldado) puedes decidir si se gasta al atacar 
+                    // o si dura un turno. Aquí lo reseteamos para mayor equilibrio:
+                    u.buffDmg = 1; 
+                });
+
+                // 2. RESETEO DE VARIABLES DE CONTROL
+                atacanteActual = null;
+                armaElegida = null;
+
+                // 3. ACTUALIZACIÓN DE INTERFAZ
+                // Cerramos el panel de estadísticas para que no se quede info vieja
+                document.getElementById('panel-estadisticas').style.display = 'none';
+                
+                // Refrescamos las barras de vida y tarjetas en el tablero
+                actualizarTablero();
+
+                // 4. PASO DE TURNO A LA IA (si corresponde)
+                if (modoJuego === 'IA') {
+                    // Un pequeño delay para que el jugador vea qué pasó antes del ataque enemigo
+                    setTimeout(ejecutarTurnoIA, 800);
+                }
+            }
+
+            async function ejecutarTurnoIA() {
+                const vivosIA = escuadronIA.filter(u => u.hp > 0);
+                const vivosPlayer = misElegidos.filter(u => u.hp > 0);
+                
+                if(vivosIA.length > 0 && vivosPlayer.length > 0) {
+                    const ene = vivosIA[Math.floor(Math.random()*vivosIA.length)];
+                    const target = vivosPlayer[Math.floor(Math.random()*vivosPlayer.length)];
+                    
+                    // El daño de la IA ahora es reducido por la defensa (Vanguard/Ingeniero)
+                    let dmgBase = 15;
+                    let reduccion = target.defensa || 0;
+                    let dmgFinal = Math.floor(dmgBase * (1 - reduccion));
+
+                    target.hp = Math.max(0, target.hp - dmgFinal);
+                    
+                    // Limpiar efectos temporales al final del turno enemigo
+                    target.defensa = 0; 
+                    
+                    mostrarImpactoUI(target._id, dmgFinal);
+                    addLog(`<span style="color:#f44">> ${ene.nombre} ATACA A ${target.nombre} (-${dmgFinal}).</span>`);
+                    
+                    if(target.hp <= 0) {
+                        addLog(`<span style="color:red; font-weight:bold;">!! ${target.nombre} HA MUERTO.</span>`);
+                        await fetch(`/api/soldado/${target._id}`, { method: 'DELETE' });
+                    }
+                    actualizarTablero();
+                }
+            }
+
+            function mostrarImpactoUI(id, dmg) {
+                const el = document.getElementById(`ficha-${id}`);
+                if(!el) return;
+                el.classList.add('recibir-dano');
+                setTimeout(() => el.classList.remove('recibir-dano'), 250);
+                const num = document.createElement('div');
+                num.className = 'dmg-float';
+                num.innerText = `-${dmg}`;
+                const rect = el.getBoundingClientRect();
+                num.style.left = `${rect.left + rect.width / 2}px`;
+                num.style.top = `${rect.top + window.scrollY}px`;
+                document.body.appendChild(num);
+                setTimeout(() => num.remove(), 800);
+            }
+
+            function actualizarTablero() {
+                const render = (u, tipo) => `
+                    <div class="unidad-card ${u.hp <= 0 ? 'dead' : ''}" id="ficha-${u._id}"
+                        style="border: 1px solid ${tipo==='a'?'#5d634f':'#8b0000'}; padding: 10px; margin: 8px 0; background: rgba(0,0,0,0.3); border-radius: 4px; cursor: pointer;"
+                        onclick="${tipo==='a'? `seleccionarAliado('${u._id}')` : `seleccionarObjetivo('${u._id}')`}">
+                        
+                        <div style="display:flex; justify-content:space-between; color:white; font-size:0.8rem; align-items: center;">
+                            <span>
+                                <strong style="text-transform: uppercase;">${u.nombre}</strong> 
+                                <small style="background:#ffb400; color:#1a1c16; padding:0 4px; margin-left:5px; font-weight:bold; border-radius:2px;">
+                                    ${u.clase ? u.clase.toUpperCase() : 'S/C'}
+                                </small>
+                            </span>
+                            <span style="color:${u.hp < 30 ? '#f44' : '#af9'}; font-weight:bold;">${u.hp} HP</span>
+                        </div>
+
+                        <div style="width:100%; background:#222; height:5px; margin:8px 0 3px 0; border-radius:2px; overflow:hidden;">
+                            <div style="width:${u.hp}%; background:${tipo==='a' ? '#5d634f' : '#8b0000'}; height:100%; transition:0.3s; box-shadow: 0 0 5px ${tipo==='a' ? '#5d634f' : '#8b0000'};"></div>
+                        </div>
+                    </div>`;
+
+                document.getElementById('cont-aliados').innerHTML = `<h3 style="color:#5d634f; text-align:center; border-bottom: 2px solid #5d634f; margin-bottom:10px;">MI PELOTÓN</h3>` + 
+                    misElegidos.map(u => render(u, 'a')).join('');
+                
+                document.getElementById('cont-enemigos').innerHTML = `<h3 style="color:#8b0000; text-align:center; border-bottom: 2px solid #8b0000; margin-bottom:10px;">FUERZAS HOSTILES</h3>` + 
+                    escuadronIA.map(u => render(u, 'e')).join('');
+            }
+
+            function addLog(msg) {
+                const log = document.getElementById('log');
+                const d = document.createElement('div');
+                d.innerHTML = msg;
+                log.appendChild(d);
+                log.scrollTop = log.scrollHeight;
+            }
+
+            // Agrega esto debajo de tus variables globales (donde está armaElegida)
+            function setArma(nombre) {
+                if (!atacanteActual) return;
+                armaElegida = nombre;
+                addLog(`> ${atacanteActual.nombre} selecciona ${nombre}. Elija un objetivo.`);
+            }
+
+            function usarHabilidad(id) {
+                const u = misElegidos.find(x => x._id === id);
+                if (!u) return;
+
+                const hab = habilidadesPorClase[u.clase.toUpperCase()];
+                if (!hab) return;
+
+                // Validar Cooldown antes de cargar
+                if (u.cdActual > 0) {
+                    addLog(`> ERROR: ${hab.nombre} en recarga (${u.cdActual} turnos).`);
+                    return;
+                }
+
+                armaElegida = hab.nombre; // Marcamos la habilidad como el "arma" a usar
+                addLog(`> <span style="color:#00f2ff;">${u.nombre} CARGA ${hab.nombre}... SELECCIONE OBJETIVO.</span>`);
+            }
+
+            function calcularDanioFinal(atacante, defensor) {
+                let danioBase = armasDB[atacante.arma_primaria]?.dmg || 
+                                armasDB[atacante.arma_secundaria]?.dmg || 
+                                armasDB[atacante.arma_melee]?.dmg || 5;
+
+                let mensajeAtaque = "";
+
+                // LÓGICA AMBIDIESTRO
+                if (atacante.perk === "Ambidiextro") {
+                    // 20% de probabilidad de ataque doble si tiene arma secundaria y melee/primaria
+                    if (Math.random() < 0.20) {
+                        danioBase *= 2; 
+                        mensajeAtaque = "¡ATAQUE DOBLE (AMBIDIESTRO)!";
+                    }
+                }
+
+                // ... resto de lógica de críticos y defensa
+                return { danio: danioBase, log: mensajeAtaque };
+            }
+
+            
+            function ejecutarAtaque(atacante, objetivo) {
+                // 1. Determinar Daño Base (Prioridad: Primaria > Secundaria > Melee)
+                let armaUsada = atacante.armas.primaria.nombre !== "Ninguna" ? atacante.armas.primaria : 
+                                atacante.armas.secundaria.nombre !== "Ninguna" ? atacante.armas.secundaria : 
+                                atacante.armas.melee;
+
+                let danioBase = armaUsada.dmg;
+                let logMensajes = [];
+
+                // --- LÓGICA DE PERKS PRE-ATAQUE ---
+
+                // PERK: SIGILO (Ataque desde las sombras)
+                if (atacante.estado.enSigilo) {
+                    if (Math.random() < 0.40) { // 40% de Crítico
+                        danioBase *= 2;
+                        logMensajes.push(`¡GOLPE CRÍTICO DESDE EL SIGILO!`);
+                    }
+                    atacante.estado.enSigilo = false; // El sigilo se rompe al atacar
+                    logMensajes.push(`${atacante.nombre} ha salido del sigilo.`);
+                }
+
+                // PERK: TIRADOR PRECISO
+                if (atacante.perk === "Tirador preciso" && Math.random() < 0.35) {
+                    danioBase *= 2;
+                    logMensajes.push(`¡DISPARO EN LA CABEZA (Tirador Preciso)!`);
+                }
+
+                // PERK: AMBIDIEXTRO (Doble Ataque)
+                let esAtaqueDoble = false;
+                if (atacante.perk === "Ambidiextro" && Math.random() < 0.20) {
+                    esAtaqueDoble = true;
+                    logMensajes.push(`¡RÁFAGA AMBIDIEXTRA! (Doble ataque)`);
+                }
+
+                // PERK: PERRO DEL DIABLO (Marcado y Ejecución)
+                if (atacante.perk === "Perro del Diablo") {
+                    if (objetivo.estado.marcado) danioBase *= 1.10; // +10%
+                    if (objetivo.hp < objetivo.hpMax * 0.30) {
+                        danioBase *= 1.40; // Ejecución +40%
+                        logMensajes.push(`¡INSTINTO ASESINO! Bono por baja salud.`);
+                    }
+                    objetivo.estado.marcado = true; // Marca al enemigo para el siguiente turno
+                }
+
+                // 2. APLICAR DAÑO
+                let danioFinal = Math.floor(esAtaqueDoble ? danioBase * 2 : danioBase);
+                objetivo.hp -= danioFinal;
+
+                // 3. LÓGICA POST-ATAQUE (Muerte y Carnicero)
+                if (objetivo.hp <= 0) {
+                    objetivo.hp = 0;
+                    logMensajes.push(`☠️ ${objetivo.nombre} ha sido eliminado.`);
+
+                    // PERK: CARNICERO (Solo si el arma usada era Melee)
+                    if (atacante.perk === "Carnicero" && armaUsada === atacante.armas.melee) {
+                        let cura = Math.floor(atacante.hpMax * (Math.random() * (0.5 - 0.3) + 0.3));
+                        atacante.hp = Math.min(atacante.hpMax, atacante.hp + cura);
+                        atacante.cdActual = 0; // Reset de Habilidades
+                        logMensajes.push(`🍖 CARNICERO: ${atacante.nombre} devora al enemigo y recupera ${cura} HP!`);
+                    }
+
+                    // PERK: SIGILO (Obtener sigilo al matar)
+                    if (atacante.perk === "Sigilo") {
+                        atacante.estado.enSigilo = true;
+                        logMensajes.push(`👤 ${atacante.nombre} desaparece en las sombras tras la baja.`);
+                    }
+                }
+
+                // Actualizar Log y UI
+                actualizarLog(logMensajes);
+                renderizarCombate();
+            }
+
+            // --- FUNCIONES PARA PVP ---
+
+            function mostrarSubmenuPvP() {
+                document.getElementById('menu-principal-op').style.display = 'none';
+                document.getElementById('menu-pvp-op').style.display = 'block';
+            }
+
+            function ocultarSubmenuPvP() {
+                document.getElementById('menu-principal-op').style.display = 'block';
+                document.getElementById('menu-pvp-op').style.display = 'none';
+            }
+
+            function generarCodigoSala() {
+                return Math.random().toString(36).substr(2, 6).toUpperCase();
+            }
+
+            async function crearSalaPvP() {
+                // 1. Generamos el código único para la sala
+                const codigo = generarCodigoSala();
+                
+                // 2. Preparamos los datos iniciales (sin enviar tropas aún para permitir elegirlas después)
+                const data = {
+                    codigo: codigo,
+                    nombre: "JUGADOR 1"
+                };
+
+                try {
+                    // 3. Avisamos al servidor para reservar la sala
+                    const res = await fetch('/api/batalla/unirse', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (res.ok) {
+                        // 4. Guardamos los datos de sesión localmente
+                        salaActual = codigo;
+                        miRol = 'j1';
+                        
+                        // 5. Mostramos el aviso del código para compartir
+                        alert("SALA CREADA: " + codigo + "\nComparte este código con tu oponente.");
+                        
+                        // 6. Cambiamos la interfaz al Lobby (donde aparecerá el botón de "Listo" y las instrucciones)
+                        mostrarLobbyPvP(codigo); 
+                        
+                        // 7. Activamos el radar para detectar cuándo se une el segundo jugador
+                        iniciarPollingPvP(codigo);
+                    }
+                } catch (e) {
+                    console.error("Error al crear la sala PvP:", e);
+                    alert("Hubo un fallo en la conexión con el servidor.");
+                }
+            }
+
+            async function unirseASalaPvP() {
+                const codigoInput = document.getElementById('codigo-input').value.toUpperCase();
+                
+                // 1. Verificación básica de que el campo no esté vacío
+                if (!codigoInput) {
+                    alert("POR FAVOR, INGRESA UN CÓDIGO DE SALA.");
+                    return;
+                }
+
+                // 2. Preparamos los datos (nombre del jugador 2)
+                const data = {
+                    codigo: codigoInput,
+                    nombre: "JUGADOR 2"
+                };
+
+                try {
+                    // 3. Intentamos conectar con la sala en el servidor
+                    const res = await fetch('/api/batalla/unirse', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    if (res.ok) {
+                        // 4. Si el servidor acepta, guardamos la sesión local
+                        salaActual = codigoInput;
+                        miRol = 'j2';
+                        
+                        // 5. Mostramos el Lobby con el botón de "Listo" e instrucciones
+                        mostrarLobbyPvP(codigoInput);
+                        
+                        // 6. Iniciamos el radar para saber cuándo empieza el combate
+                        iniciarPollingPvP(codigoInput);
+                        
+                    } else {
+                        alert("SALA NO ENCONTRADA O LLENA.");
+                    }
+                } catch (e) {
+                    console.error("Error al unirse a la sala:", e);
+                    alert("ERROR DE CONEXIÓN CON EL SERVIDOR.");
+                }
+            }
+
+            function iniciarPollingPvP(codigo) {
+                const loop = setInterval(async () => {
+                    const res = await fetch(`/api/batalla/estado/${codigo}`);
+                    const data = await res.json();
+                    
+                    if (data.estado === 'listo') {
+                        clearInterval(loop);
+                        escuadronIA = data.jugador2.tropas;
+                        document.getElementById('modal-inicio').style.display = 'none';
+                        document.getElementById('fase-combate').style.display = 'block';
+                        actualizarTablero();
+                        addLog("> EL 2OPONENTE SE HA CONECTADO. ¡A LAS ARMAS!");
+                    }
+                }, 3000);
+            }
+
+            async function confirmarListo() {
+                try {
+                    const res = await fetch(`/api/batalla/listo`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            codigo: salaActual, 
+                            rol: miRol,
+                            tropas: misElegidos 
+                        })
+                    });
+
+                    if (res.ok) {
+                        document.getElementById('btn-listo').innerText = "ESPERANDO AL OTRO...";
+                        document.getElementById('btn-listo').disabled = true;
+                        document.getElementById('btn-listo').style.background = "#666";
+                    }
+                } catch (e) {
+                    alert("Error al confirmar estado.");
+                }
+            }
+                
+           async function crearSalaPvP() {
+            // ELIMINAMOS EL IF DE LOS 10 SOLDADOS AQUÍ
+            const codigo = generarCodigoSala();
+            const data = {
+                codigo: codigo,
+                nombre: "JUGADOR 1"
+            };
+
+            try {
+                const res = await fetch('/api/batalla/unirse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (res.ok) {
+                    salaActual = codigo;
+                    miRol = 'j1';
+                    
+                    // Cambiamos la interfaz para esperar y permitir elegir soldados
+                    document.getElementById('modal-inicio').innerHTML = `
+                        <div style="background: #e0ddd5; padding: 30px; border: 3px solid #1a1c16; text-align: center;">
+                            <h2 style="color: #1a1c16;">SALA: ${codigo}</h2>
+                            <p>VE A "ESCUADRÓN" Y SELECCIONA TUS TROPAS (10-20).</p>
+                            <button onclick="confirmarListo()" id="btn-listo" style="background: #4a5d23; color: white; padding: 10px 20px; border:none; cursor: pointer; font-weight:bold;">
+                                [ CONFIRMAR ESCUADRÓN Y LISTO ]
+                            </button>
+                        </div>
+                    `;
+                    iniciarPollingPvP(codigo);
+                }
+            } catch (e) { console.error("Error:", e); }
+        }
+
+    async function unirseASalaPvP() {
+        const codigoInput = document.getElementById('codigo-input').value.toUpperCase();
+        
+        // ELIMINAMOS EL IF DE LOS 10 SOLDADOS AQUÍ TAMBIÉN
+        const data = {
+            codigo: codigoInput,
+            nombre: "JUGADOR 2"
+        };
+
+        try {
+            const res = await fetch('/api/batalla/unirse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                salaActual = codigoInput;
+                miRol = 'j2';
+                
+                document.getElementById('modal-inicio').innerHTML = `
+                    <div style="background: #e0ddd5; padding: 30px; border: 3px solid #1a1c16; text-align: center;">
+                        <h2 style="color: #1a1c16;">SALA: ${codigoInput}</h2>
+                        <p>CONECTADO. PREPARA TU ESCUADRÓN EN EL MENÚ SUPERIOR.</p>
+                        <button onclick="confirmarListo()" id="btn-listo" style="background: #4a5d23; color: white; padding: 10px 20px; border:none; cursor: pointer; font-weight:bold;">
+                            [ CONFIRMAR ESCUADRÓN Y LISTO ]
+                        </button>
+                    </div>
+                `;
+                iniciarPollingPvP(codigoInput);
+            } else {
+                alert("SALA NO ENCONTRADA.");
+            }
+        } catch (e) { console.error("Error:", e); }
+    }
+
+    async function unirseASalaPvP() {
+        codigoSala = document.getElementById('codigo-input').value.toUpperCase();
+        if (!codigoSala) return alert("Introduce un código");
+
+        // 1. Validamos la sala en el servidor
+        const res = await fetch('/api/batalla/unirse', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codigo: codigoSala, nombre: "Comandante" })
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+            modoJuego = "PVP";
+            document.getElementById('modal-inicio').style.display = 'none';
+            document.getElementById('modal-espera').style.display = 'flex';
+            document.getElementById('lobby-sala-id').innerText = `SALA: ${codigoSala}`;
+            
+            // Aquí conectas tu Socket para escuchar el inicio
+            conectarSocket(codigoSala); 
+        } else {
+            alert("Sala no encontrada o llena");
+        }
+    }
+
+    function marcarListo() {
+        const btn = document.getElementById('btn-ready');
+        btn.style.background = "#ffb400";
+        btn.innerText = "ESPERANDO AL OPONENTE...";
+        btn.disabled = true;
+
+        // Avisamos al servidor que este jugador ya configuró su equipo en Barracas
+        socket.emit('jugador-listo', { codigo: codigoSala });
+    }
+
+    // El servidor nos avisará cuando AMBOS estén listos
+    function conectarSocket(sala) {
+        // Supongamos que tienes socket ya definido
+        socket.emit('join-room', sala);
+
+        socket.on('empezar-seleccion', () => {
+            // AMBOS jugadores son llevados AQUÍ al mismo tiempo
+            document.getElementById('modal-espera').style.display = 'none';
+            document.getElementById('fase-seleccion').style.display = 'block';
+            inicializar(); // Carga las unidades de la DB para escoger
+        });
+    }
+    async function confirmarListo() {
+        // AQUÍ es donde realmente importa la cantidad
+        if (misElegidos.length < 10) {
+            alert("¡ALTO! NECESITAS AL MENOS 10 SOLDADOS EN TU ESCUADRÓN PARA LA BATALLA.");
+            return;
+        }
+        if (misElegidos.length > 20) {
+            alert("DEMASIADOS SOLDADOS. EL MÁXIMO SON 20.");
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/batalla/listo`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    codigo: salaActual, 
+                    rol: miRol,
+                    tropas: misElegidos 
+                })
+            });
+
+            if (res.ok) {
+                const btn = document.getElementById('btn-listo');
+                btn.innerText = "ESPERANDO AL OPONENTE...";
+                btn.disabled = true;
+                btn.style.background = "#666";
+            }
+        } catch (e) {
+            alert("Error de conexión con el cuartel general.");
+        }
+    }
+
+    // Esta función reemplaza el contenido del modal al entrar a la sala
+        function renderizarLobbyPvP(codigo) {
+            document.getElementById('modal-inicio').innerHTML = `
+                <div style="background: #e0ddd5; padding: 30px; border: 3px solid #1a1c16; text-align: center; font-family: monospace;">
+                    <h2 style="color: #1a1c16; letter-spacing: 2px;">SALA: ${codigo}</h2>
+                    <p id="estado-conexion" style="color: #4a5d23; font-weight: bold;">[ ESTADO: ESPERANDO OPONENTE ]</p>
+                    <hr style="border: 1px dashed #1a1c16;">
+                    <p style="font-size: 0.9em;">1. VE AL MENÚ <b>[ ESCUADRÓN ]</b> Y ELIGE TUS TROPAS.<br>
+                    2. REGRESA AQUÍ Y PRESIONA EL BOTÓN.</p>
+                    
+                    <button onclick="confirmarListo()" id="btn-listo" 
+                        style="background: #4a5d23; color: white; padding: 15px; width: 100%; border: none; cursor: pointer; font-weight: bold; margin-top: 10px;">
+                        [ CONFIRMAR ESCUADRÓN Y LISTO ]
+                    </button>
+                </div>
+            `;
+        }
+
+        async function confirmarListo() {
+            // Validación de unidades
+            const cantidad = misElegidos.length;
+            
+            if (cantidad < 10 || cantidad > 20) {
+                alert(`ERROR: TIENES ${cantidad} SOLDADOS. SE REQUIEREN ENTRE 10 Y 20.`);
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/batalla/listo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        codigo: salaActual, 
+                        rol: miRol, 
+                        tropas: misElegidos 
+                    })
+                });
+
+                if (res.ok) {
+                    const btn = document.getElementById('btn-listo');
+                    btn.innerText = "ESPERANDO QUE EL OTRO ESTÉ LISTO...";
+                    btn.style.background = "#666";
+                    btn.disabled = true;
+                    document.getElementById('estado-conexion').innerText = "[ ESTADO: PREPARADO ]";
+                }
+            } catch (e) {
+                console.error("Error al confirmar:", e);
+            }
+        }
+
+        function iniciarPollingPvP(codigo) {
+            const loop = setInterval(async () => {
+                const res = await fetch(`/api/batalla/estado/${codigo}`);
+                const data = await res.json();
+                
+                // Actualizar visualmente si el oponente ya se unió (para el Creador)
+                if (data.jugador2 && data.jugador2.nombre) {
+                    const estadoTxt = document.getElementById('estado-conexion');
+                    if (estadoTxt && !data.estado === 'combate') {
+                        estadoTxt.innerText = "[ OPONENTE CONECTADO - ELIGIENDO ]";
+                    }
+                }
+
+                // Si el servidor cambió el estado a 'combate', iniciamos
+                if (data.estado === 'combate') {
+                    clearInterval(loop);
+                    
+                    // Cargar tropas del enemigo (quien no sea yo)
+                    escuadronIA = (miRol === 'j1') ? data.jugador2.tropas : data.jugador1.tropas;
+                    
+                    // Transición a la batalla
+                    document.getElementById('modal-inicio').style.display = 'none';
+                    document.getElementById('fase-combate').style.display = 'block';
+                    
+                    actualizarTablero();
+                    addLog("> AMBOS COMANDANTES ESTÁN LISTOS. ¡QUE COMIENCE EL DUELO!");
+                }
+            }, 2000); 
+        }
+
+        function mostrarLobbyPvP(codigo) {
+            // Cambiamos el diseño para que sepa que tiene que ir a ESCUADRÓN
+            const modal = document.getElementById('modal-inicio');
+            modal.style.display = 'block'; 
+            modal.innerHTML = `
+                <div style="background: #e0ddd5; padding: 25px; border: 4px solid #1a1c16; text-align: center; width: 400px; margin: auto; position: relative; top: 20%;">
+                    <h2 style="color: #1a1c16; font-family: 'Courier New', monospace; border-bottom: 2px solid #1a1c16; padding-bottom: 10px;">
+                        CENTRO DE MANDO: ${codigo}
+                    </h2>
+                    <p id="info-espera" style="color: #4a5d23; font-weight: bold; margin: 15px 0;">
+                        [ ESTADO: PREPARANDO OPERACIÓN ]
+                    </p>
+                    <div style="background: #d0cdc4; padding: 10px; border: 1px solid #999; margin-bottom: 20px; font-size: 0.85em;">
+                        <p>INSTRUCCIONES:</p>
+                        <ul style="text-align: left; list-style: none; padding: 0;">
+                            <li>1. Selecciona <b>[ ESCUADRÓN ]</b> en el menú superior.</li>
+                            <li>2. Elige entre 10 y 20 soldados.</li>
+                            <li>3. Regresa aquí y presiona el botón verde.</li>
+                        </ul>
+                    </div>
+                    
+                    <button onclick="confirmarListo()" id="btn-listo" 
+                        style="background: #4a5d23; color: white; padding: 15px; width: 100%; border: none; cursor: pointer; font-weight: bold; font-family: monospace; border-bottom: 4px solid #2a3d13;">
+                        [ CONFIRMAR ESCUADRÓN Y LISTO ]
+                    </button>
+                </div>
+            `;
+        }
+
+    </script>
+</body>
+</html>

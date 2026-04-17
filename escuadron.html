@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>ESCUADRÓN - Steel Blood And Death</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        .grid-escuadron {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+            padding: 20px;
+        }
+
+        .ficha-soldado {
+            background: #e0ddd0; 
+            color: #1a1c16;
+            border: 2px solid #1a1c16;
+            padding: 15px;
+            position: relative;
+            box-shadow: 5px 5px 0px #1a1c16;
+            transition: transform 0.2s;
+        }
+
+        .ficha-soldado:hover { transform: translateY(-3px); }
+
+        .ficha-soldado h3 {
+            margin: 0;
+            border-bottom: 2px solid #1a1c16;
+            padding-bottom: 5px;
+            color: #5d634f;
+            text-transform: uppercase;
+        }
+
+        .detalle {
+            font-size: 0.8rem;
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+
+        .clase-tag {
+            background: #5d634f;
+            color: white;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            float: right;
+            border-radius: 2px;
+        }
+
+        .btn-baja {
+            width:100%; 
+            background:#8b0000; 
+            color:white; 
+            border:none; 
+            padding:10px; 
+            cursor:pointer; 
+            font-weight:bold;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .btn-baja:hover { background: #ff0000; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="/">[ CENTRAL DE MANDO ]</a>
+        <a href="/barracas">[ BARRACAS ]</a>
+        <a href="/ver-escuadron" style="color: #ffb400;">[ ESCUADRÓN ]</a>
+        <a href="/combate">[ COMBATE ]</a>
+    </nav>
+
+    <div class="main-container" style="flex-direction: column; align-items: center;">
+        <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #ffb400; text-shadow: 2px 2px #000;">REGISTRO DE PERSONAL ACTIVO</h1>
+            <small style="letter-spacing: 2px; color: #a4a993;">DIVISION BREZO - ESTADO DE FUERZAS</small>
+        </div>
+
+        <div id="contenedor-soldados" class="grid-escuadron">
+            <p style="text-align: center; grid-column: 1/-1; color: #afff94;">> ACCEDIENDO A LOS ARCHIVOS CLASIFICADOS...</p>
+        </div>
+
+        <a href="/barracas" style="margin-top: 30px; color: #ffb400; text-decoration: none; font-weight: bold;">
+            [ + RECLUTAR NUEVA UNIDAD EN BARRACAS ]
+        </a>
+    </div>
+
+    <script>
+    async function cargarEscuadron() {
+        try {
+            const respuesta = await fetch('/api/escuadron');
+            const soldados = await respuesta.json();
+            const contenedor = document.getElementById('contenedor-soldados');
+            
+            if (soldados.length === 0) {
+                contenedor.innerHTML = '<p style="text-align: center; grid-column: 1/-1; color: #ff4444; border: 1px dashed #ff4444; padding: 20px;">NO HAY UNIDADES REGISTRADAS EN EL SISTEMA.</p>';
+                return;
+            }
+
+            contenedor.innerHTML = soldados.map(s => `
+                <div class="ficha-soldado" id="ficha-${s._id}">
+                    <span class="clase-tag">${s.clase}</span>
+                    <h3>${s.nombre}</h3>
+                    <div class="detalle">
+                        <strong>NIVEL DE SERVICIO:</strong> Lvl ${s.nivel || 1}<br>
+                        <strong>ESTADO FÍSICO:</strong> ${s.hp || 100}% EFICIENCIA<br>
+                        <strong>ARMAMENTO:</strong> ${s.arma_primaria} / ${s.arma_secundaria}<br>
+                        <strong>C.C.:</strong> ${s.arma_melee}
+                    </div>
+                    <button onclick="eliminarSoldado('${s._id}')" class="btn-baja">
+                        [ DAR DE BAJA ]
+                    </button>
+                </div>
+            `).join('');
+        } catch (e) {
+            console.error("Error cargando escuadrón:", e);
+        }
+    }
+
+    async function eliminarSoldado(id) {
+        if(confirm("¿ESTÁ SEGURO DE QUE DESEA ELIMINAR ESTA UNIDAD? ESTA ACCIÓN ES IRREVERSIBLE.")) {
+            const respuesta = await fetch('/api/soldado/' + id, { method: 'DELETE' });
+            if(respuesta.ok) {
+                cargarEscuadron(); 
+            } else {
+                alert("Error en la comunicación con el Cuartel General.");
+            }
+        }
+    }
+
+    window.onload = cargarEscuadron;
+    </script>
+</body>
+</html>

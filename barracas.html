@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BARRACAS - Steel Blood And Death</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        /* Ajustes de diseño para el formulario de reclutamiento */
+        .centro-reclutamiento {
+            max-width: 550px;
+            padding: 30px;
+        }
+
+        /* Sobrescribir estilos específicos para los selectores dentro de la tarjeta */
+        select, input {
+            width: 100%; 
+            background: #e0ddd0; /* Papel viejo */
+            color: #1a1c16; 
+            border: 2px solid #1a1c16; 
+            padding: 12px; 
+            margin: 10px 0;
+            font-family: 'Courier New', Courier, monospace;
+            box-sizing: border-box;
+            font-weight: bold;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            background: #ffffff;
+            border-color: #ffb400; /* Resalte dorado */
+        }
+
+        label {
+            font-size: 0.85rem;
+            color: #ffb400; /* Color de énfasis */
+            display: block;
+            margin-top: 15px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        /* ESTILO PARA LA CAJA DE HABILIDAD */
+        .habilidad-preview {
+            background: #1a1c16;
+            color: #afff94;
+            padding: 10px;
+            border-left: 3px solid #ffb400;
+            font-size: 0.75rem;
+            margin-top: -5px;
+            margin-bottom: 10px;
+            font-family: 'Consolas', monospace;
+        }
+
+        .info-panel {
+            background: rgba(255, 180, 0, 0.05);
+            border: 1px dashed #5d634f;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.8rem;
+            color: #d1ccb9;
+        }
+
+        .slot-warning {
+            color: #ff4444;
+            font-size: 0.85rem;
+            display: none; /* Se activa por JS */
+            margin-top: 10px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid #ff4444;
+            padding: 5px;
+        }
+
+        .btn-volver {
+            display: block;
+            margin-top: 15px;
+            color: #a4a993;
+            text-decoration: none;
+            font-size: 0.75rem;
+            text-align: center;
+            text-transform: uppercase;
+            transition: 0.3s;
+        }
+
+        .btn-volver:hover {
+            color: #ff4444;
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <a href="/">[ CENTRAL DE MANDO ]</a>
+        <a href="/barracas" style="color: #ffb400;">[ BARRACAS ]</a>
+        <a href="/ver-escuadron">[ ESCUADRÓN ]</a>
+        <a href="/combate">[ COMBATE ]</a>
+    </nav>
+
+    <div class="main-container">
+        <div class="card centro-reclutamiento">
+            <div style="border-bottom: 2px solid #1a1c16; margin-bottom: 20px; padding-bottom: 10px;">
+                <h2 style="margin: 0; border: none;">RECLUTAMIENTO DE UNIDAD</h2>
+                <small style="color: #5d634f;">ASIGNACIÓN DE EQUIPAMIENTO Y CLASE</small>
+            </div>
+
+            <div class="info-panel">
+                <strong>DIRECTIVA DE CARGA:</strong><br>
+                • Soldado: 3 Slots (4 con Sobreviviente).<br>
+                • Otros: 2 Slots (3 con Sobreviviente).<br>
+                • Primaria: 2 Slots | Secundaria: 1 Slot | Melee: 1 Slot.
+            </div>
+
+            <form action="/crear-soldado" method="POST" id="form-reclutar">
+                <label>IDENTIFICACIÓN DE LA UNIDAD:</label>
+                <input type="text" name="nombre" placeholder="Ej: Vanguardia-01" required>
+                
+                <label>ESPECIALIZACIÓN (CLASE):</label>
+                <select name="clase" id="clase" required onchange="actualizarHabilidad()">
+                    <option value="Soldado">Soldado (Equilibrado - 3 Slots)</option>
+                    <option value="Ingeniero">Ingeniero (Defensivo - 2 Slots)</option>
+                    <option value="Funerario">Funerario (Soporte - 2 Slots)</option>
+                    <option value="Oficial">Oficial (Liderazgo - 2 Slots)</option>
+                    <option value="Jaeger">Jaeger (Explorador - 2 Slots)</option>
+                    <option value="Lancer">Lancer (Asalto - 2 Slots)</option>
+                    <option value="Vanguard">Vanguard (Tanque - 2 Slots)</option>
+                </select>
+
+                <div id="preview-habilidad" class="habilidad-preview">
+                    Cargando datos de clase...
+                </div>
+
+                <select name="arma_primaria" id="primaria">
+                    <option value="Ninguna" data-slots="0">--- SIN ARMA PRIMARIA ---</option>
+                    <option value="Rifle" data-slots="2">Rifle (Dmg: 25)</option>
+                    <option value="Rifle con mirilla" data-slots="2">Rifle Mirilla (Crit: 39%)</option>
+                    <option value="Escopeta recortada" data-slots="2">Escopeta Recortada (Multi)</option>
+                    <option value="Rifle Revolver" data-slots="2">Rifle Revólver (Penetración)</option>
+                    <option value="King Revolver" data-slots="2">King Revolver (Dmg: 45)</option>
+                </select>
+
+                <select name="arma_secundaria" id="secundaria">
+                    <option value="Ninguna" data-slots="0">--- NINGUNA ---</option>
+                    <option value="Pistola de oficial" data-slots="1">Pistola de Oficial</option>
+                    <option value="Pistola de mano" data-slots="1">Pistola Ligera</option>
+                    <option value="Revolver de mano" data-slots="1">Revólver de Mano</option>
+                    <option value="Escopeta de mano" data-slots="1">Escopeta de Mano</option>
+                </select>
+
+                <select name="arma_melee" id="melee">
+                    <option value="Ninguna" data-slots="0">--- NINGUNA ---</option> 
+                    <option value="Cuchillo" data-slots="1">Cuchillo de Combate (Dmg: 50)</option>
+                    <option value="Pala" data-slots="1">Pala de Trinchera (Ignora Def)</option>
+                    <option value="Martillo" data-slots="1">Martillo de Guerra (Crit: 20%)</option>
+                    <option value="Machete" data-slots="1">Machete (Dmg: 40)</option>
+                    <option value="Hoz" data-slots="1">Hoz (Dmg: 22)</option>
+                </select>
+
+                <label>VENTAJA OPERATIVA (PERK):</label>
+                    <select name="perk" id="perk" required onchange="actualizarInfoPerk()">
+                        <option value="Sobreviviente">Sobreviviente (+1 Slot, +10% Dmg, Aguante)</option>
+                        <option value="Veterano">Veterano (-1 CD Habilidad, +10% Resistencia)</option>
+                        <option value="Tirador preciso">Tirador Preciso (+35% Prob. Crítico)</option>
+                        <option value="Hipocratico">Hipocrático (Curación Crítica 100%)</option>
+                        <option value="Sigilo">Sigilo (Invisibilidad al matar + Crítico)</option>
+                        <option value="Carnicero">Carnicero (Melee: Cura y Reset de CD)</option>
+                        <option value="Quimico">Químico (Buff Defensivo al curar)</option>
+                        <option value="Rata">Rata (Anti-Sigilo y +50% Daño contra Sigilo)</option>
+                        <option value="Ambidiextro">Ambidextro (Doble arma de 1 Slot + Doble Ataque)</option>
+                        <option value="Suertudo">Suertudo (Evasión y Anti-Muerte)</option>
+                        <option value="Perro del Diablo">Perro del Diablo (Marcado y Ejecución <30% HP)</option>
+                    </select>
+
+                    <div id="preview-perk" class="habilidad-preview" style="border-left-color: #afff94; margin-top: 10px;">
+                        Selecciona una ventaja...
+                    </div>
+
+                <div id="aviso-peso" class="slot-warning">
+                    ⚠️ SOBRECARGA: CAPACIDAD DE SLOTS EXCEDIDA
+                </div>
+
+                <button type="submit" class="btn-reclutar" id="btn-enviar">
+                    FINALIZAR ALTA DE UNIDAD
+                </button>
+            </form>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <a href="/ver-escuadron" style="color: #ffb400; text-decoration: none; font-size: 0.8rem; display: block; margin-bottom: 10px;">
+                    [ CONSULTAR ESCUADRÓN ACTUAL ]
+                </a>
+                <a href="/" class="btn-volver">
+                    « ABORTAR Y VOLVER AL CENTRO DE MANDO
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('form-reclutar');
+        const aviso = document.getElementById('aviso-peso');
+        const btn = document.getElementById('btn-enviar');
+        const previewHab = document.getElementById('preview-habilidad');
+        // Asegúrate de tener un div id="preview-perk" en tu HTML para ver esto
+        const previewPerk = document.getElementById('preview-perk');
+
+        // --- 1. DATOS DE HABILIDADES POR CLASE ---
+        const infoHabilidades = {
+            'Soldado':   { n: 'Suministro', d: 'Munición pesada: +50% daño en el próximo ataque. (Enfriamiento: 3 turnos).' },
+            'Ingeniero': { n: 'Búnker', d: 'Despliega cobertura: Otorga +30% de defensa a un aliado.' },
+            'Funerario': { n: 'Exequias', d: 'Primeros auxilios: Cura 25 HP a una unidad aliada.' },
+            'Oficial':   { n: 'Silbato', d: 'Orden de carga: Todo el equipo gana +15% de daño pasivo.' },
+            'Jaeger':    { n: 'Marca', d: 'Designar objetivo: El enemigo recibe +30% de daño adicional.' },
+            'Lancer':    { n: 'Adrenalina', d: 'Inyección: Recupera 15 HP y aumenta el daño un 20%.' },
+            'Vanguard':  { n: 'Guardia', d: 'Muro de escudos: +20% defensa a todo el pelotón.' }
+        };
+
+        // --- 2. DATOS DE PERKS (VENTAJAS) ---
+        const infoPerks = {
+            'Sobreviviente': 'Aumenta +1 Slot. +10% daño. 10% de sobrevivir a muerte segura.',
+            'Veterano': '-1 turno de CD en habilidades. Recibe -10% de daño.',
+            'Tirador preciso': 'Aumenta la probabilidad de realizar un ataque crítico en un 35%.',
+            'Hipocratico': 'Cura 10% HP. 30% de probabilidad de cura crítica (restaura 100%).',
+            'Sigilo': 'Invisibilidad tras matar. +40% crítico al atacar desde sigilo.',
+            'Carnicero': 'Muerte Melee: Cura 30-50% HP y resetea enfriamientos (CD).',
+            'Quimico': 'Al curar a un aliado, le otorga un buff defensivo del 10%.',
+            'Rata': 'Detecta sigilo. +50% de daño contra unidades ocultas (2 turnos).',
+            'Ambidiextro': 'Usa 2 armas ligeras. 20% de probabilidad de realizar ataque doble.',
+            'Suertudo': '20% Evasión. 30% de ignorar un golpe que resultaría mortal.',
+            'Perro del Diablo': 'Marca al atacar (+10% daño). Ejecución: +40% daño si el rival tiene <30% HP.'
+        };
+
+        // --- 3. FUNCIONES DE ACTUALIZACIÓN ---
+
+        function actualizarHabilidad() {
+            const claseSel = document.getElementById('clase').value;
+            const info = infoHabilidades[claseSel];
+            if(info) {
+                previewHab.innerHTML = `<b style="color:#ffb400;">HABILIDAD: ${info.n}</b><br>${info.d}`;
+            }
+        }
+
+        function actualizarInfoPerk() {
+            const perkSel = document.getElementById('perk').value;
+            const desc = infoPerks[perkSel] || "Selecciona una ventaja operativa.";
+            const pElement = document.getElementById('preview-perk');
+            if(pElement) {
+                pElement.innerHTML = `<b style="color:#afff94;">PASIVA: ${perkSel}</b><br>${desc}`;
+            }
+        }
+
+        function calcularPeso() {
+            // Lógica de slots máximos
+            const clase = document.getElementById('clase').value;
+            const perk = document.getElementById('perk').value;
+
+            let maxSlots = (clase === 'Soldado') ? 3 : 2;
+            
+            // Bonus por Perk Sobreviviente
+            if (perk === 'Sobreviviente') maxSlots += 1;
+
+            // Obtener slots de cada arma seleccionada
+            const pSlots = parseInt(document.getElementById('primaria').selectedOptions[0]?.dataset.slots || 0);
+            const sSlots = parseInt(document.getElementById('secundaria').selectedOptions[0]?.dataset.slots || 0);
+            const mSlots = parseInt(document.getElementById('melee').selectedOptions[0]?.dataset.slots || 0);
+
+            const pesoTotal = pSlots + sSlots + mSlots;
+
+            // Mostrar u ocultar aviso de sobrecarga
+            if (pesoTotal > maxSlots) {
+                aviso.style.display = 'block';
+                aviso.innerText = `⚠️ SOBRECARGA: ${pesoTotal} / ${maxSlots} SLOTS`;
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            } else {
+                aviso.style.display = 'none';
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+            }
+        }
+
+        // --- 4. EVENTOS ---
+
+        // Detectar cualquier cambio en el formulario
+        form.addEventListener('change', () => {
+            calcularPeso();
+            actualizarHabilidad();
+            actualizarInfoPerk();
+        });
+        
+        // Ejecución inicial
+        window.onload = () => {
+            calcularPeso();
+            actualizarHabilidad();
+            actualizarInfoPerk();
+        };
+    </script>
+
+</body>
+</html>
