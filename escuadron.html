@@ -120,6 +120,17 @@
         }
     }
 
+    // Recuperamos el ID que guardamos en el login
+const miId = localStorage.getItem('userId');
+
+// Ahora pedimos los soldados específicos de ese ID
+fetch('/api/escuadron/' + miId)
+    .then(res => res.json())
+    .then(data => {
+        console.log("Mis soldados cargados:", data);
+        // Aquí sigue tu función actual para mostrar los soldados en pantalla
+    });
+
     async function eliminarSoldado(id) {
         if(confirm("¿ESTÁ SEGURO DE QUE DESEA ELIMINAR ESTA UNIDAD? ESTA ACCIÓN ES IRREVERSIBLE.")) {
             const respuesta = await fetch('/api/soldado/' + id, { method: 'DELETE' });
