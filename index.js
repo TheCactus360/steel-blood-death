@@ -27,6 +27,9 @@ app.get('/combate', (req, res) => {
     res.sendFile(path.join(__dirname, 'combate.html'));
 });
 
+app.use(express.urlencoded({ extended: true })); // Para leer datos de formularios
+app.use(express.json()); // Para leer datos JSON
+
 // --- CONFIGURACIÓN DEL PUERTO ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
