@@ -248,6 +248,10 @@
             }
         }
 
+        // Si usas un script para enviar el formulario de creación:
+        const idUsuario = localStorage.getItem('userId');
+        // Asegúrate de que este 'idUsuario' se envíe en el cuerpo (body) del POST como 'userId'
+        
         function calcularPeso() {
             // Lógica de slots máximos
             const clase = document.getElementById('clase').value;
