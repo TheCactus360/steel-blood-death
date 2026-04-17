@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: steel-blood-death
+    runtime: node
+    buildCommand: npm install
+    startCommand: node modelo.js
